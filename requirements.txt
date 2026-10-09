@@ -1,0 +1,13 @@
+# Core
+numpy
+mlflow
+pytest
+
+# Dense retrieval (embedding model)
+sentence-transformers
+
+# TODO: your choices, uncomment/add what you decide to use
+# - BM25: a library (e.g. rank-bm25, bm25s) or hand-rolled with numpy/scipy
+# - Vector index: plain numpy matmul, or a library (e.g. faiss-cpu, hnswlib)
+# - Dataset download: `beir` package, or fetch the zip yourself (urllib/requests)
+# - LLM for generation: local (e.g. llama-cpp-python, ollama client) or a free-tier API client
