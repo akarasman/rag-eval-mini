@@ -1,6 +1,7 @@
 # Core
 numpy
 mlflow
+pydantic>=2
 pytest
 
 # Dense retrieval (embedding model)
