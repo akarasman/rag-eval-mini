@@ -6,13 +6,13 @@ indexed, and for tokenizing text for the lexical retriever.
 """
 import re
 from nltk.stem import PorterStemmer
-from typing import Optional
+from typing import Dict, List
 
 _ALNUM = r"[^\W_]+"
 _TOKEN_PATTERN = re.compile(rf"{_ALNUM}(?:(?:-|(?<=\d)\.(?=\d)){_ALNUM})*")
 _PORTER_STEMMER: PorterStemmer = PorterStemmer() 
 
-def doc_to_text(doc: dict[str, str]) -> str:
+def doc_to_text(doc: Dict[str, str]) -> str:
     """Combine title and body into the single string that gets indexed."""
     
     title = doc.get("title", '')
@@ -20,7 +20,7 @@ def doc_to_text(doc: dict[str, str]) -> str:
     return title + ('. ' if title != '' else '')  + text
 
 
-def tokenize(text: str, stem: bool = False) -> list[str]:
+def tokenize(text: str, stem: bool = False) -> List[str]:
     """Split text into tokens for BM25."""
 
     words = _TOKEN_PATTERN.findall(text.lower())
