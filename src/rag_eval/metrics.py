@@ -8,15 +8,16 @@ examples. Averaging over queries happens in evaluate.py.
 
 import heapq
 from math import log2
+from typing import Dict, List, Optional
 
 
-def _require_relevant(relevant: dict[str, int]) -> None:
+def _require_relevant(relevant: Dict[str, int]) -> None:
     """Metrics are undefined for a query with no relevant docs; callers must skip such queries."""
     if not any(grade > 0 for grade in relevant.values()):
         raise ValueError("query has no relevant docs (no grade > 0); skip it before scoring")
 
 
-def recall_at_k(ranked_ids: list[str], relevant: dict[str, int], k: int) -> float:
+def recall_at_k(ranked_ids: List[str], relevant: Dict[str, int], k: int) -> float:
     """Fraction of relevant docs found in the top-k.
     
     Args:
@@ -40,7 +41,7 @@ def recall_at_k(ranked_ids: list[str], relevant: dict[str, int], k: int) -> floa
 
     return retrieved_relevant / sum_relevant
 
-def reciprocal_rank(ranked_ids: list[str], relevant: dict[str, int], k: int | None = None) -> float:
+def reciprocal_rank(ranked_ids: List[str], relevant: Dict[str, int], k: Optional[int] = None) -> float:
     """1 / rank of the first relevant doc (0 if none).
     
     Args:
@@ -68,7 +69,7 @@ def reciprocal_rank(ranked_ids: list[str], relevant: dict[str, int], k: int | No
     return 0.0
 
 
-def ndcg_at_k(ranked_ids: list[str], relevant: dict[str, int], k: int) -> float:
+def ndcg_at_k(ranked_ids: List[str], relevant: Dict[str, int], k: int) -> float:
     """Normalised discounted cumulative gain at k.
     
     Args:
