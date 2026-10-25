@@ -4,6 +4,9 @@ mlflow
 pydantic>=2
 pytest
 
+# Text processing (stemming)
+nltk
+
 # Dense retrieval (embedding model)
 sentence-transformers
 
