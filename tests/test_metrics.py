@@ -7,7 +7,7 @@ from math import log2
 
 import pytest
 
-from rag_eval.metrics import ndcg_at_k, recall_at_k, reciprocal_rank
+from rag_eval.metrics import METRIC_REGISTRY, get_metric, ndcg_at_k, recall_at_k, reciprocal_rank, register_metric
 
 
 # --- query with no relevant docs (all metrics refuse to score it) -----------
@@ -139,3 +139,38 @@ def test_ndcg_stays_between_zero_and_one(ranked):
 def test_ndcg_rejects_non_positive_k(k):
     with pytest.raises(ValueError, match="k"):
         ndcg_at_k(["a"], {"a": 1}, k)
+
+
+# --- registry ---------------------------------------------------------------
+
+@pytest.mark.parametrize("name", sorted(METRIC_REGISTRY))
+def test_every_registered_metric_scores_a_perfect_ranking_as_one(name):
+    # Catches a metric registered with the wrong function or signature.
+    assert get_metric(name)(["a", "b", "c"], {"a": 1}, 3) == pytest.approx(1.0)
+
+
+def test_get_metric_returns_the_registered_function():
+    assert get_metric("recall") is recall_at_k
+    assert get_metric("mrr") is reciprocal_rank
+    assert get_metric("ndcg") is ndcg_at_k
+
+
+def test_get_metric_rejects_an_unknown_name_and_lists_the_available_ones():
+    with pytest.raises(ValueError, match="recall"):
+        get_metric("nope")
+
+
+def test_register_metric_adds_the_function_and_returns_it_unchanged(monkeypatch):
+    monkeypatch.setattr("rag_eval.metrics.METRIC_REGISTRY", dict(METRIC_REGISTRY))
+
+    @register_metric("constant")
+    def constant(ranked_ids, relevant, k):
+        return 0.5
+
+    assert get_metric("constant") is constant
+    assert constant([], {}, 1) == 0.5  # the decorator must not wrap or replace the function
+
+
+def test_register_metric_rejects_a_duplicate_name():
+    with pytest.raises(ValueError, match="already registered"):
+        register_metric("recall")(lambda ranked_ids, relevant, k: 0.0)

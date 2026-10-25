@@ -8,7 +8,42 @@ examples. Averaging over queries happens in evaluate.py.
 
 import heapq
 from math import log2
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional, TypeVar
+
+# A metric scores ONE ranked list against ONE query's relevance labels: (ranked_ids, relevant, k) -> score.
+MetricFunction = Callable[[List[str], Dict[str, int], int], float]
+_MetricT = TypeVar("_MetricT", bound=MetricFunction)
+
+# Metrics an experiment can ask for by name. Filled by @register_metric; read through get_metric.
+# Keys are bare names; evaluate.py reports each one at every k as "<name>@<k>", e.g. "recall@10".
+METRIC_REGISTRY: Dict[str, MetricFunction] = {}
+
+
+def register_metric(name: str) -> Callable[[_MetricT], _MetricT]:
+    """Decorator that registers a metric function under `name`. The function itself is returned unchanged.
+
+    To add a metric: write a function with the MetricFunction signature and decorate it.
+
+    Raises:
+        ValueError: if the name is already registered.
+    """
+    def decorator(metric_fn: _MetricT) -> _MetricT:
+        if name in METRIC_REGISTRY:
+            raise ValueError(f"Metric {name!r} is already registered")
+        METRIC_REGISTRY[name] = metric_fn
+        return metric_fn
+    return decorator
+
+
+def get_metric(name: str) -> MetricFunction:
+    """Look up a registered metric by name.
+
+    Raises:
+        ValueError: if the name is not registered (the message lists the available ones).
+    """
+    if name not in METRIC_REGISTRY:
+        raise ValueError(f"Unknown metric {name!r}; available: {sorted(METRIC_REGISTRY)}")
+    return METRIC_REGISTRY[name]
 
 
 def _require_relevant(relevant: Dict[str, int]) -> None:
@@ -17,6 +52,7 @@ def _require_relevant(relevant: Dict[str, int]) -> None:
         raise ValueError("query has no relevant docs (no grade > 0); skip it before scoring")
 
 
+@register_metric("recall")
 def recall_at_k(ranked_ids: List[str], relevant: Dict[str, int], k: int) -> float:
     """Fraction of relevant docs found in the top-k.
     
@@ -41,6 +77,7 @@ def recall_at_k(ranked_ids: List[str], relevant: Dict[str, int], k: int) -> floa
 
     return retrieved_relevant / sum_relevant
 
+@register_metric("mrr")
 def reciprocal_rank(ranked_ids: List[str], relevant: Dict[str, int], k: Optional[int] = None) -> float:
     """1 / rank of the first relevant doc (0 if none).
     
@@ -69,6 +106,7 @@ def reciprocal_rank(ranked_ids: List[str], relevant: Dict[str, int], k: Optional
     return 0.0
 
 
+@register_metric("ndcg")
 def ndcg_at_k(ranked_ids: List[str], relevant: Dict[str, int], k: int) -> float:
     """Normalised discounted cumulative gain at k.
     
