@@ -1,12 +1,13 @@
-"""Tests for retrievers. Currently covers the oracle only.
+"""Tests for retrievers. Covers the oracle and BM25.
 
-TODO: BM25, dense and hybrid tests on a tiny hand-made corpus where the right top result is obvious.
+TODO: dense and hybrid tests on a tiny hand-made corpus where the right top result is obvious.
 """
 import logging
 
 import pytest
 
 from rag_eval.metrics import ndcg_at_k, recall_at_k, reciprocal_rank
+from rag_eval.retrievers.bm25 import BM25Retriever
 from rag_eval.retrievers.oracle import OracleRetriever
 
 
@@ -117,3 +118,91 @@ def test_oracle_scores_perfectly_with_the_real_metrics(query_id, k, use_filler_d
     assert ndcg_at_k(ids, relevant, k) == pytest.approx(1.0)
     # recall can only reach min(k, |relevant|) / |relevant|, for any retriever
     assert recall_at_k(ids, relevant, k) == pytest.approx(min(k, len(relevant)) / len(relevant))
+
+
+# --- bm25 -------------------------------------------------------------------
+
+BM25_CORPUS = {
+    "d1": {"title": "Tumor suppressor", "text": "The p53 protein suppresses tumor growth."},
+    "d2": {"title": "Heart disease", "text": "Myocardial infarction damages heart muscle."},
+    "d3": {"title": "Diet", "text": "Vitamin D intake and bone density."},
+    "d4": {"title": "Gene expression", "text": "Mutations in p53 alter gene expression."},
+}
+
+
+def _bm25(corpus=BM25_CORPUS, **kwargs) -> BM25Retriever:
+    retriever = BM25Retriever(**kwargs)
+    retriever.index(corpus)
+    return retriever
+
+
+def test_bm25_ranks_the_matching_document_first():
+    assert _ids(_bm25().search("heart muscle", k=4))[0] == "d2"
+
+
+def test_bm25_scores_are_descending_and_matching_docs_beat_non_matching():
+    ranking = _bm25().search("p53", k=4)
+    scores = [score for _, score in ranking]
+
+    assert scores == sorted(scores, reverse=True)
+    assert set(_ids(ranking)[:2]) == {"d1", "d4"}  # the two p53 documents
+    assert scores[1] > 0
+    assert scores[2:] == [0.0, 0.0]
+
+
+def test_bm25_pads_with_zero_score_docs_in_corpus_order():
+    ranking = _bm25().search("vitamin", k=4)
+
+    assert _ids(ranking) == ["d3", "d1", "d2", "d4"]
+    assert [score for _, score in ranking[1:]] == [0.0, 0.0, 0.0]
+
+
+def test_bm25_returns_at_most_the_corpus_size():
+    assert len(_bm25().search("p53", k=100)) == len(BM25_CORPUS)
+
+
+def test_bm25_trims_to_k():
+    assert len(_bm25().search("p53", k=1)) == 1
+
+
+@pytest.mark.parametrize("query", ["", "...", "zzzunknown"])
+def test_bm25_query_without_known_terms_scores_everything_zero(query):
+    ranking = _bm25().search(query, k=4)
+
+    assert [score for _, score in ranking] == [0.0] * 4
+    assert _ids(ranking) == ["d1", "d2", "d3", "d4"]
+
+
+def test_bm25_matching_is_case_insensitive():
+    assert _bm25().search("HEART", k=4) == _bm25().search("heart", k=4)
+
+
+def test_bm25_stemming_matches_inflections_only_when_enabled():
+    corpus = {"a": {"title": "", "text": "mutations"}, "b": {"title": "", "text": "unrelated"}}
+
+    assert _bm25(corpus).search("mutation", k=2)[0][1] == 0.0
+    top_id, top_score = _bm25(corpus, stem=True).search("mutation", k=2)[0]
+    assert top_id == "a"
+    assert top_score > 0
+
+
+def test_bm25_title_is_searchable():
+    assert _ids(_bm25().search("diet", k=1)) == ["d3"]
+
+
+def test_bm25_raises_if_searched_before_indexing():
+    with pytest.raises(RuntimeError, match="index"):
+        BM25Retriever().search("p53")
+
+
+@pytest.mark.parametrize("k", [0, -1])
+def test_bm25_rejects_non_positive_k(k):
+    with pytest.raises(ValueError, match="k"):
+        _bm25().search("p53", k=k)
+
+
+def test_bm25_reindexing_replaces_the_previous_corpus():
+    retriever = _bm25()
+    retriever.index({"x": {"title": "", "text": "heart"}})
+
+    assert _ids(retriever.search("heart", k=5)) == ["x"]

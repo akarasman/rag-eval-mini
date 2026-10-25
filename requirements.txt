@@ -7,6 +7,9 @@ pytest
 # Text processing (stemming)
 nltk
 
+# Lexical retrieval (BM25, Lucene variant)
+bm25s
+
 # Dense retrieval (embedding model)
 sentence-transformers
 
