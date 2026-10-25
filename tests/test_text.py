@@ -1,5 +1,6 @@
 """Tests for text.py."""
 import copy
+from typing import List
 
 import pytest
 import rag_eval.text as text_module
@@ -65,7 +66,7 @@ class _FakeStemmer:
     """Records every word it is asked to stem."""
 
     def __init__(self):
-        self.stemmed_words: list[str] = []
+        self.stemmed_words: List[str] = []
 
     def stem(self, word: str) -> str:
         self.stemmed_words.append(word)
