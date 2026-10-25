@@ -42,8 +42,8 @@ class BM25Retriever:
         self._doc_ids = doc_ids
 
     def search(self, query: str, k: int = 10) -> Ranking:
-        """Top-k documents, best first. Documents sharing no term with the query score 0.0
-        and pad the ranking in corpus order, so the result has min(k, corpus size) entries.
+        """Top-k documents, best first. Only documents sharing at least one term with the query
+        are returned, so the ranking can be shorter than k, or empty. It is never padded.
 
         Raises:
             RuntimeError: if index() hasn't been called.
@@ -55,11 +55,12 @@ class BM25Retriever:
             raise ValueError("k must be positive")
 
         query_tokens = tokenize(query, stem=self.stem)
-        if query_tokens:
-            scores = self._bm25.get_scores(query_tokens)
-        else:  # bm25s raises on an empty token list
-            scores = np.zeros(len(self._doc_ids))
+        if not query_tokens:  # bm25s raises on an empty token list
+            return []
 
-        # Stable sort: documents with equal scores (e.g. all the zeros) keep corpus order.
-        top = np.argsort(-scores, kind="stable")[:k]
+        scores = self._bm25.get_scores(query_tokens)
+        matching = np.flatnonzero(scores > 0)  # a score of 0 means no query term occurs in the document
+
+        # Stable sort over the matches only: equal scores keep corpus order, so results are reproducible.
+        top = matching[np.argsort(-scores[matching], kind="stable")[:k]]
         return [(self._doc_ids[i], float(scores[i])) for i in top]

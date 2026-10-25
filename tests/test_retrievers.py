@@ -140,37 +140,36 @@ def test_bm25_ranks_the_matching_document_first():
     assert _ids(_bm25().search("heart muscle", k=4))[0] == "d2"
 
 
-def test_bm25_scores_are_descending_and_matching_docs_beat_non_matching():
-    ranking = _bm25().search("p53", k=4)
+def test_bm25_scores_are_descending_and_positive():
+    ranking = _bm25().search("p53 gene", k=4)
     scores = [score for _, score in ranking]
 
     assert scores == sorted(scores, reverse=True)
-    assert set(_ids(ranking)[:2]) == {"d1", "d4"}  # the two p53 documents
-    assert scores[1] > 0
-    assert scores[2:] == [0.0, 0.0]
+    assert all(score > 0 for score in scores)
 
 
-def test_bm25_pads_with_zero_score_docs_in_corpus_order():
-    ranking = _bm25().search("vitamin", k=4)
-
-    assert _ids(ranking) == ["d3", "d1", "d2", "d4"]
-    assert [score for _, score in ranking[1:]] == [0.0, 0.0, 0.0]
+def test_bm25_returns_only_documents_that_share_a_term_with_the_query():
+    assert set(_ids(_bm25().search("p53", k=4))) == {"d1", "d4"}
+    assert _ids(_bm25().search("vitamin", k=4)) == ["d3"]
 
 
 def test_bm25_returns_at_most_the_corpus_size():
-    assert len(_bm25().search("p53", k=100)) == len(BM25_CORPUS)
+    assert len(_bm25().search("p53 heart vitamin gene", k=100)) == len(BM25_CORPUS)
 
 
 def test_bm25_trims_to_k():
     assert len(_bm25().search("p53", k=1)) == 1
 
 
-@pytest.mark.parametrize("query", ["", "...", "zzzunknown"])
-def test_bm25_query_without_known_terms_scores_everything_zero(query):
-    ranking = _bm25().search(query, k=4)
+def test_bm25_equal_scores_keep_corpus_order():
+    corpus = {key: {"title": "", "text": "heart"} for key in ("z", "a", "m")}
 
-    assert [score for _, score in ranking] == [0.0] * 4
-    assert _ids(ranking) == ["d1", "d2", "d3", "d4"]
+    assert _ids(_bm25(corpus).search("heart", k=3)) == ["z", "a", "m"]
+
+
+@pytest.mark.parametrize("query", ["", "...", "zzzunknown"])
+def test_bm25_query_without_known_terms_returns_nothing(query):
+    assert _bm25().search(query, k=4) == []
 
 
 def test_bm25_matching_is_case_insensitive():
@@ -180,7 +179,7 @@ def test_bm25_matching_is_case_insensitive():
 def test_bm25_stemming_matches_inflections_only_when_enabled():
     corpus = {"a": {"title": "", "text": "mutations"}, "b": {"title": "", "text": "unrelated"}}
 
-    assert _bm25(corpus).search("mutation", k=2)[0][1] == 0.0
+    assert _bm25(corpus).search("mutation", k=2) == []
     top_id, top_score = _bm25(corpus, stem=True).search("mutation", k=2)[0]
     assert top_id == "a"
     assert top_score > 0

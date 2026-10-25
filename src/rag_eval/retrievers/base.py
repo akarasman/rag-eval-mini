@@ -17,7 +17,12 @@ class Retriever(Protocol):
         ...
 
     def search(self, query: str, k: int = 10) -> Ranking:
-        """Return the top-k documents for the query, best first."""
+        """Return the top-k documents for the query, best first.
+
+        The ranking has at most k entries and may be shorter, or empty: a retriever returns
+        only documents it has evidence for and never pads with filler. Callers must not
+        assume len(ranking) == k.
+        """
         ...
 
 # TODO: decide whether Protocol, an ABC, or plain duck typing suits you
