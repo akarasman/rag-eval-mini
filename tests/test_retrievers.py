@@ -9,6 +9,7 @@ import pytest
 from rag_eval.metrics import ndcg_at_k, recall_at_k, reciprocal_rank
 from rag_eval.retrievers.bm25 import BM25Retriever
 from rag_eval.retrievers.oracle import OracleRetriever
+from rag_eval.retrievers.registry import build_retriever, register_retriever
 
 
 # --- oracle -----------------------------------------------------------------
@@ -205,3 +206,27 @@ def test_bm25_reindexing_replaces_the_previous_corpus():
     retriever.index({"x": {"title": "", "text": "heart"}})
 
     assert _ids(retriever.search("heart", k=5)) == ["x"]
+
+
+# --- registry ---------------------------------------------------------------
+
+def test_bm25_is_registered_and_built_from_params():
+    retriever = build_retriever("bm25", {"k1": 1.2, "stem": True})
+
+    assert isinstance(retriever, BM25Retriever)
+    assert (retriever.k1, retriever.b, retriever.stem) == (1.2, 0.75, True)
+
+
+def test_build_retriever_rejects_an_unknown_name_and_lists_the_available_ones():
+    with pytest.raises(ValueError, match="bm25"):
+        build_retriever("nope", {})
+
+
+def test_build_retriever_rejects_parameters_the_retriever_does_not_take():
+    with pytest.raises(ValueError, match="bm25.*typo"):
+        build_retriever("bm25", {"typo": 1})
+
+
+def test_register_retriever_rejects_a_duplicate_name():
+    with pytest.raises(ValueError, match="already registered"):
+        register_retriever("bm25")(BM25Retriever)

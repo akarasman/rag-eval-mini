@@ -13,8 +13,10 @@ import numpy as np
 
 from ..text import doc_to_text, tokenize
 from .base import Ranking
+from .registry import register_retriever
 
 
+@register_retriever("bm25")
 class BM25Retriever:
     """Args:
         k1: term-frequency saturation.
