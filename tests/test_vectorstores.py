@@ -139,3 +139,32 @@ def test_exact_store_breaks_ties_at_the_cutoff_by_insertion_order():
     store.build(list("abcdef"), np.array([[1.0, 0.0]] * 6))  # six equal scores, only three fit
 
     assert [vector_id for vector_id, _ in store.search(np.array([1.0, 0.0]), k=3)] == ["a", "b", "c"]
+
+
+# --- registry ---------------------------------------------------------------
+
+def test_exact_store_is_registered_and_built_by_name():
+    from rag_eval.vectorstores.registry import build_vector_store
+
+    assert isinstance(build_vector_store("exact", {}), ExactVectorStore)
+
+
+def test_build_vector_store_rejects_an_unknown_name_and_lists_the_available_ones():
+    from rag_eval.vectorstores.registry import build_vector_store
+
+    with pytest.raises(ValueError, match="exact"):
+        build_vector_store("nope", {})
+
+
+def test_build_vector_store_rejects_parameters_the_store_does_not_take():
+    from rag_eval.vectorstores.registry import build_vector_store
+
+    with pytest.raises(ValueError, match="exact.*typo"):
+        build_vector_store("exact", {"typo": 1})
+
+
+def test_register_vector_store_rejects_a_duplicate_name():
+    from rag_eval.vectorstores.registry import register_vector_store
+
+    with pytest.raises(ValueError, match="already registered"):
+        register_vector_store("exact")(ExactVectorStore)

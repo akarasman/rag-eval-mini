@@ -9,8 +9,10 @@ import numpy as np
 
 from ..utils import top_k_indices
 from .base import SearchResult, validate_build_input, validate_search_input
+from .registry import register_vector_store
 
 
+@register_vector_store("exact")
 class ExactVectorStore:
     name = "exact"
 
