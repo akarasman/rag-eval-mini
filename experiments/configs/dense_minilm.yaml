@@ -1,0 +1,21 @@
+experiment: scifact-baselines
+
+dataset:
+  name: scifact
+  data_dir: data
+  split: test
+
+retriever:
+  name: dense
+  params:
+    model_name: sentence-transformers/all-MiniLM-L6-v2
+    store: exact
+
+metrics:
+  names: [recall, mrr, ndcg]
+  ks: [1, 5, 10, 100]
+
+mlflow:
+  examples:
+    n: 10
+    metric: ndcg@10
