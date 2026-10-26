@@ -87,7 +87,7 @@ class DenseRetriever:
 
         return vectors
 
-    def _load_cached_vectors(self, embedder, texts: List[str], doc_ids: List[str]) -> np.ndarray | None:
+    def _load_cached_vectors(self, embedder: Embedder, texts: List[str], doc_ids: List[str]) -> Optional[np.ndarray]:
         vectors = self._cache.load(embedder.fingerprint, doc_ids, texts)
         if vectors is not None:
             logging.info(f"Loaded {len(doc_ids)} cached embeddings from {self.cache_dir}")
@@ -105,7 +105,7 @@ class DenseRetriever:
 
         vectors = None
         if self._cache is not None:
-            vectors = self._load_cached_vectors()
+            vectors = self._load_cached_vectors(embedder, texts, doc_ids)
         if vectors is None:
             vectors = self._build_vectors(embedder, texts, doc_ids)
 
