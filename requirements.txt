@@ -3,6 +3,7 @@ numpy
 mlflow
 pydantic>=2
 pyyaml
+requests
 pytest
 
 # Text processing (stemming)
