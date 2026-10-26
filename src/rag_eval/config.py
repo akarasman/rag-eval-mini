@@ -77,7 +77,7 @@ class ExamplesConfig(_StrictModel):
 
 class MlflowConfig(_StrictModel):
     """MLflow options. The experiment name is the top-level `experiment` of the config."""
-    tracking_uri: Optional[str] = None  # None: MLflow's default (a local ./mlruns folder)
+    tracking_uri: Optional[str] = None  # None: MLflow's default (a SQLite file, mlflow.db, in the working directory)
     run_name: Optional[str] = None  # None: derived from the retriever and its parameters
     tags: Dict[str, str] = Field(default_factory=dict)
     log_per_query: bool = True  # store the per-query scores as an artifact

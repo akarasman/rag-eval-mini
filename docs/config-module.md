@@ -20,7 +20,7 @@ Design choices for describing an experiment run in a file. Example: `experiments
 | Metrics | `names` and `ks`; every metric is computed at every k, keyed `<name>@<k>` | Mirrors `evaluate`. Tuples, because `evaluate` takes tuples |
 | MLflow experiment | Top-level `experiment` | Groups comparable runs (e.g. `scifact-baselines`) |
 | MLflow run name | Configured, or derived from the retriever and its params (`bm25 k1=1.2 stem=True`) | Runs are recognizable in the UI without naming each one |
-| MLflow options | `tracking_uri` (None = local `./mlruns`), `tags`, `log_per_query`, `examples` | `log_per_query` stores the per-query scores as an artifact |
+| MLflow options | `tracking_uri` (None = MLflow's default, a SQLite file `mlflow.db` in the working directory; MLflow 3.x refuses the old `./mlruns` file store unless opted in), `tags`, `log_per_query`, `examples` | `log_per_query` stores the per-query scores as an artifact |
 | Query examples | The `n` best and `n` worst queries by one result metric (default 10, `ndcg@10`); `n: 0` disables | Shows what works and what fails; the metric must be one the config computes |
 
 ## Derived values
