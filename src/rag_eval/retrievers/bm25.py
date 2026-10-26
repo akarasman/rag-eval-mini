@@ -12,6 +12,7 @@ import bm25s
 import numpy as np
 
 from ..text import doc_to_text, tokenize
+from ..utils import top_k_indices
 from .base import Ranking
 from .registry import register_retriever
 
@@ -63,6 +64,6 @@ class BM25Retriever:
         scores = self._bm25.get_scores(query_tokens)
         matching = np.flatnonzero(scores > 0)  # a score of 0 means no query term occurs in the document
 
-        # Stable sort over the matches only: equal scores keep corpus order, so results are reproducible.
-        top = matching[np.argsort(-scores[matching], kind="stable")[:k]]
+        # Top k among the matches only; equal scores keep corpus order (matching is ascending), so results are reproducible.
+        top = matching[top_k_indices(scores[matching], k)]
         return [(self._doc_ids[i], float(scores[i])) for i in top]

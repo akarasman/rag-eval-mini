@@ -15,7 +15,7 @@ Design choices for the lexical baseline that the dense retriever has to beat.
 | Tokenizer | Our own `tokenize`, passed to the library as token lists | Keeps the tokenizer under test and under our control; the library's own tokenizer is never used |
 | Stemming | `stem` is a constructor argument, applied to documents and queries | A mismatch between index and query tokenization is silent (recall just drops), so the retriever owns the setting and it cannot diverge |
 | Fewer than `k` matches | **No padding**: return only documents with a positive score, so the ranking can be shorter than `k` or empty | Padding carries no signal and can only inflate metrics: a padded document that happens to be relevant counts as a hit, in an order that depends on corpus order. Padding with a sentinel ID outside the corpus was considered and rejected because it puts fake IDs into rankings that fusion and evaluation would have to tolerate. The metrics already treat missing documents as misses. This also matches how real BM25 systems behave |
-| Scoring | Score every document per query, keep scores > 0, stable `argsort` over those, take top `k` | Deterministic: equal scores keep corpus order, so results are reproducible. `np.argpartition` would be O(N) but picks arbitrarily among ties at the boundary, which matters for short documents with identical scores |
+| Scoring | Score every document per query, keep scores > 0, take the top `k` of those with `utils.top_k_indices` | Deterministic: equal scores keep corpus order, so results are reproducible. `top_k_indices` is O(n) with an exact tie-break, the same result as a full stable sort (see `docs/utils-module.md`) |
 | Empty query | Returns `[]` without calling the library | `bm25s.get_scores` raises `IndexError` on an empty token list; unknown words, by contrast, are handled by the library and score 0, so they are dropped |
 | State on failure | `index()` assigns state last | A failed `index()` leaves the previous index intact, as in the oracle |
 
@@ -30,5 +30,4 @@ Tiny four-document corpus where the right top result is obvious: correct top doc
 ## Open items
 - No comparison with reference scores yet; check against the published BM25 nDCG@10 for SciFact (about 0.67) once the evaluation loop runs on real data.
 - Compare `stem=True` vs `False` and the title format on the real queries.
-- `argpartition` instead of a full sort over the matches if the corpus ever gets large (needs a deterministic tie-break).
 - The oracle still pads with real corpus documents up to `k` (`use_filler_docs`). That is harmless for it (scores are unaffected) but inconsistent with BM25's behavior; decide whether to align it.
