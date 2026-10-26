@@ -13,3 +13,5 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = ["slow: uses the real embedding model (downloads it); run with -m slow"]
