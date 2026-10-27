@@ -79,7 +79,12 @@ class HybridRetriever:
             raise ValueError(f"Invalid parameters for fusion {self.fusion_name!r}: {error}") from error
 
     def index(self, corpus: Dict[str, Dict[str, str]]) -> None:
-        """Index every sub-retriever on the corpus."""
+        """Index every sub-retriever on the corpus.
+
+        Args:
+            corpus: doc ID -> {"title": ..., "text": ...}, as returned by load_corpus(). Every
+                sub-retriever is indexed on the same corpus, so their rankings share doc IDs.
+        """
         for retriever in self._retrievers:
             retriever.index(corpus)
         self._indexed = True

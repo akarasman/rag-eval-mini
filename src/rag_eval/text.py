@@ -13,7 +13,11 @@ _TOKEN_PATTERN = re.compile(rf"{_ALNUM}(?:(?:-|(?<=\d)\.(?=\d)){_ALNUM})*")
 _PORTER_STEMMER: PorterStemmer = PorterStemmer() 
 
 def doc_to_text(doc: Dict[str, str]) -> str:
-    """Combine title and body into the single string that gets indexed."""
+    """Combine title and body into the single string that gets indexed.
+
+    Args:
+        doc: a corpus entry with "title" and "text"; a missing field counts as "".
+    """
     
     title = doc.get("title", '')
     text = doc.get("text", '')
@@ -21,7 +25,12 @@ def doc_to_text(doc: Dict[str, str]) -> str:
 
 
 def tokenize(text: str, stem: bool = False) -> List[str]:
-    """Split text into tokens for BM25."""
+    """Split text into tokens for BM25.
+
+    Args:
+        text: the text to split; it is lowercased first.
+        stem: reduce each token to its Porter stem. Documents and queries must use the same setting.
+    """
 
     words = _TOKEN_PATTERN.findall(text.lower())
     if stem:

@@ -34,6 +34,10 @@ def available_retrievers() -> List[str]:
 def build_retriever(name: str, params: Dict[str, Any]) -> Retriever:
     """Construct a registered retriever from keyword parameters.
 
+    Args:
+        name: the registered name, e.g. "bm25".
+        params: keyword arguments for the retriever's constructor (the config's `params`).
+
     Raises:
         ValueError: if the name is not registered, or the parameters do not fit the retriever
             (the message names the retriever and the offending parameters).

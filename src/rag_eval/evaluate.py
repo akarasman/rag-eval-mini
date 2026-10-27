@@ -68,6 +68,13 @@ def evaluate(
     A ranking shorter than k (or empty) is scored as is, so missing documents count as misses.
     Every query counts equally in the means.
 
+    Args:
+        retriever: an already indexed retriever.
+        queries: query ID -> query text; every query is evaluated.
+        qrels: query ID -> {doc ID: relevance grade}; a grade > 0 means relevant.
+        ks: the cutoffs to score each metric at.
+        metrics: names of registered metrics, e.g. "recall".
+
     Raises:
         ValueError: if ks or metrics is empty, if ks has a non-positive value, if a metric name is
             not registered, if there are no queries, or if a query has no qrels or no relevant doc

@@ -33,6 +33,10 @@ def available_vector_stores() -> List[str]:
 def build_vector_store(name: str, params: Dict[str, Any]) -> VectorStore:
     """Construct a registered vector store from keyword parameters.
 
+    Args:
+        name: the registered name, e.g. "exact".
+        params: keyword arguments for the store's constructor.
+
     Raises:
         ValueError: if the name is not registered, or the parameters do not fit the store.
     """

@@ -21,11 +21,19 @@ class Embedder(Protocol):
         ...
 
     def embed_documents(self, texts: List[str]) -> np.ndarray:
-        """Embed documents. Returns an (n, dim) float32 array of unit-length rows."""
+        """Embed documents. Returns an (n, dim) float32 array of unit-length rows.
+
+        Args:
+            texts: the document texts, one row of the result per text, in the same order.
+        """
         ...
 
     def embed_query(self, text: str) -> np.ndarray:
-        """Embed one query. Returns a (dim,) float32 array of unit length."""
+        """Embed one query. Returns a (dim,) float32 array of unit length.
+
+        Args:
+            text: the query text. Queries may be embedded differently from documents (e.g. a prefix).
+        """
         ...
 
 

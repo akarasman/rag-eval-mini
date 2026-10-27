@@ -129,6 +129,9 @@ class ExperimentConfig(_StrictModel):
 def load_config(path: Path) -> ExperimentConfig:
     """Read and validate a YAML config file.
 
+    Args:
+        path: the YAML file, e.g. experiments/configs/bm25.yaml.
+
     Raises:
         ValueError: if the file is not a YAML mapping, or does not pass validation
             (pydantic's ValidationError is a ValueError and names every offending field).

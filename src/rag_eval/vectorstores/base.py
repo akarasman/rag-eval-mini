@@ -30,7 +30,12 @@ class VectorStore(Protocol):
         ...
 
     def search(self, vector: np.ndarray, k: int) -> SearchResult:
-        """Return the k stored vectors with the highest inner product with `vector`, best first."""
+        """Return the k stored vectors with the highest inner product with `vector`, best first.
+
+        Args:
+            vector: the query, a 1-D array with the same dimension as the stored vectors.
+            k: the maximum number of results; must be positive.
+        """
         ...
 
     def __len__(self) -> int:
@@ -42,6 +47,10 @@ def validate_build_input(ids: List[str], vectors: np.ndarray) -> np.ndarray:
     """Check what build() received and return the vectors as a private float32 (n, dim) copy.
 
     Shared by all stores so they reject the same bad input the same way.
+
+    Args:
+        ids: the ids passed to build().
+        vectors: the vectors passed to build().
 
     Raises:
         ValueError: if vectors is not a non-empty 2-D array, if ids and vectors differ in length,
@@ -59,6 +68,11 @@ def validate_build_input(ids: List[str], vectors: np.ndarray) -> np.ndarray:
 
 def validate_search_input(vector: np.ndarray, k: int, dim: int) -> np.ndarray:
     """Check what search() received and return the query as a float32 1-D array.
+
+    Args:
+        vector: the query vector passed to search().
+        k: the k passed to search().
+        dim: the dimension of the stored vectors.
 
     Raises:
         ValueError: if k <= 0, or the vector is not 1-D with `dim` entries.
