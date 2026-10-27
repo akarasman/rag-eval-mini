@@ -1,14 +1,22 @@
 """Tests for vector stores.
 
 Contract tests run against every store listed in STORE_FACTORIES (adding a backend there runs them all);
-behaviour specific to the exact store (determinism, true top-k) is tested separately.
+behaviour specific to one store (exact: determinism, true top-k; faiss: agreement with exact) is tested
+separately.
 """
+from functools import partial
+
 import numpy as np
 import pytest
 
 from rag_eval.vectorstores.exact import ExactVectorStore
+from rag_eval.vectorstores.faiss_store import FaissVectorStore
 
-STORE_FACTORIES = {"exact": ExactVectorStore}
+STORE_FACTORIES = {
+    "exact": ExactVectorStore,
+    "faiss_flat": partial(FaissVectorStore, index_type="flat"),
+    "faiss_hnsw": partial(FaissVectorStore, index_type="hnsw"),
+}
 
 
 @pytest.fixture(params=sorted(STORE_FACTORIES))
@@ -141,12 +149,85 @@ def test_exact_store_breaks_ties_at_the_cutoff_by_insertion_order():
     assert [vector_id for vector_id, _ in store.search(np.array([1.0, 0.0]), k=3)] == ["a", "b", "c"]
 
 
+# --- faiss store only -------------------------------------------------------
+# Tie order is not tested here: FAISS does not guarantee one, so a test of it would pin an accident.
+
+def _random_unit_vectors(n: int, dim: int, seed: int = 0):
+    rng = np.random.default_rng(seed)
+    vectors = rng.normal(size=(n, dim)).astype(np.float32)
+    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+    return [str(i) for i in range(n)], vectors
+
+
+def _ids_of(result):
+    return [vector_id for vector_id, _ in result]
+
+
+@pytest.mark.parametrize("params", [
+    {"index_type": "ivf"},
+    {"hnsw_m": 0},
+    {"ef_search": -1},
+])
+def test_faiss_store_rejects_bad_parameters(params):
+    with pytest.raises(ValueError, match=next(iter(params))):  # the message names the bad parameter
+        FaissVectorStore(**params)
+
+
+def test_faiss_flat_returns_the_same_top_k_as_the_exact_store():
+    ids, vectors = _random_unit_vectors(500, 32)
+    exact, flat = ExactVectorStore(), FaissVectorStore(index_type="flat")
+    exact.build(ids, vectors)
+    flat.build(ids, vectors)
+
+    for query in vectors[:20]:
+        expected, result = exact.search(query, k=10), flat.search(query, k=10)
+
+        assert _ids_of(result) == _ids_of(expected)
+        assert [score for _, score in result] == pytest.approx([score for _, score in expected], abs=1e-5)
+
+
+def test_faiss_hnsw_finds_most_of_the_true_neighbours():
+    # Approximate, so measure recall against the exact store rather than demanding equality.
+    ids, vectors = _random_unit_vectors(500, 32)
+    exact, hnsw = ExactVectorStore(), FaissVectorStore(index_type="hnsw")
+    exact.build(ids, vectors)
+    hnsw.build(ids, vectors)
+
+    queries = _random_unit_vectors(20, 32, seed=1)[1]  # not stored vectors, so the task is not trivial
+    recalls = [
+        len(set(_ids_of(hnsw.search(q, k=10))) & set(_ids_of(exact.search(q, k=10)))) / 10
+        for q in queries
+    ]
+
+    assert np.mean(recalls) >= 0.9
+
+
+def test_faiss_hnsw_builds_an_hnsw_index_with_the_given_settings():
+    # Looks at the private index on purpose: the contract tests would also pass if "hnsw" built a flat index.
+    import faiss
+
+    store = FaissVectorStore(index_type="hnsw", ef_search=128)
+    store.build(IDS, VECTORS)
+
+    assert isinstance(store._index, faiss.IndexHNSWFlat)
+    assert store._index.hnsw.efSearch == 128
+
+
 # --- registry ---------------------------------------------------------------
 
-def test_exact_store_is_registered_and_built_by_name():
+@pytest.mark.parametrize("name, store_class", [("exact", ExactVectorStore), ("faiss", FaissVectorStore)])
+def test_every_store_is_registered_and_built_by_name(name, store_class):
     from rag_eval.vectorstores.registry import build_vector_store
 
-    assert isinstance(build_vector_store("exact", {}), ExactVectorStore)
+    assert isinstance(build_vector_store(name, {}), store_class)
+
+
+def test_faiss_settings_from_a_config_reach_the_store():
+    from rag_eval.vectorstores.registry import build_vector_store
+
+    store = build_vector_store("faiss", {"index_type": "hnsw", "ef_search": 32})
+
+    assert (store.index_type, store.ef_search) == ("hnsw", 32)
 
 
 def test_build_vector_store_rejects_an_unknown_name_and_lists_the_available_ones():

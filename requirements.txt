@@ -15,6 +15,9 @@ bm25s
 # Dense retrieval (embedding model)
 sentence-transformers
 
+# Vector stores (approximate nearest-neighbour search)
+faiss-cpu
+
 # TODO: your choices, uncomment/add what you decide to use
 # - BM25: a library (e.g. rank-bm25, bm25s) or hand-rolled with numpy/scipy
 # - Vector index: plain numpy matmul, or a library (e.g. faiss-cpu, hnswlib)
