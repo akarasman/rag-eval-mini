@@ -8,3 +8,4 @@ mlflow.db
 data/*
 !data/.gitkeep
 cache/
+.vscode/
