@@ -10,6 +10,7 @@ from rag_eval.retrievers.fusion import (
     get_fusion,
     reciprocal_rank_fusion,
     register_fusion,
+    weighted_score_fusion,
 )
 
 
@@ -24,9 +25,10 @@ def _ids(ranking: Ranking) -> List[str]:
 
 # --- registry ---------------------------------------------------------------
 
-def test_rrf_is_registered_under_its_name():
+def test_the_strategies_are_registered_under_their_names():
     assert get_fusion("rrf") is reciprocal_rank_fusion
-    assert "rrf" in available_fusions()
+    assert get_fusion("weighted") is weighted_score_fusion
+    assert {"rrf", "weighted"} <= set(available_fusions())
 
 
 def test_get_fusion_rejects_an_unknown_name_and_lists_the_available_ones():
@@ -53,7 +55,7 @@ def test_register_fusion_rejects_a_duplicate_name():
 # --- contract: every registered fusion must pass these ----------------------
 # Settings each strategy needs to run (rrf has defaults); add an entry when a strategy needs params.
 
-FUSION_PARAMS = {"rrf": {}}
+FUSION_PARAMS = {"rrf": {}, "weighted": {}}
 
 
 @pytest.fixture(params=sorted(FUSION_REGISTRY))
@@ -174,3 +176,115 @@ def test_rrf_is_deterministic():
 def test_rrf_rejects_invalid_arguments(kwargs, message):
     with pytest.raises(ValueError, match=message):
         reciprocal_rank_fusion(**kwargs)
+
+
+# --- weighted score fusion --------------------------------------------------
+
+R1 = [("A", 10.0), ("B", 5.0), ("C", 0.0)]  # normalized: A 1.0, B 0.5, C 0.0
+R2 = [("B", 0.9), ("C", 0.6), ("D", 0.3)]  # normalized: B 1.0, C 0.5, D 0.0
+
+
+def _scores(ranking: Ranking) -> dict:
+    return dict(ranking)
+
+
+def test_weighted_fusion_adds_weighted_min_max_normalized_scores():
+    fused = _scores(weighted_score_fusion([R1, R2], weights=[0.7, 0.3]))
+
+    assert fused["A"] == pytest.approx(0.7 * 1.0)  # only in the first list
+    assert fused["B"] == pytest.approx(0.7 * 0.5 + 0.3 * 1.0)
+    assert fused["C"] == pytest.approx(0.7 * 0.0 + 0.3 * 0.5)
+    assert fused["D"] == pytest.approx(0.0)  # the worst document of its only list
+
+
+def test_the_weights_decide_who_wins():
+    assert _ids(weighted_score_fusion([R1, R2], weights=[0.7, 0.3])) == ["A", "B", "C", "D"]
+    assert _ids(weighted_score_fusion([R1, R2], weights=[0.3, 0.7])) == ["B", "C", "A", "D"]
+
+
+def test_no_weights_means_equal_weights():
+    assert weighted_score_fusion([R1, R2]) == weighted_score_fusion([R1, R2], weights=[1, 1])
+    assert _ids(weighted_score_fusion([R1, R2])) == ["B", "A", "C", "D"]
+
+
+def test_weights_are_rescaled_to_sum_to_one():
+    scaled = _scores(weighted_score_fusion([R1, R2], weights=[7, 3]))
+    unit = _scores(weighted_score_fusion([R1, R2], weights=[0.7, 0.3]))
+
+    assert scaled == pytest.approx(unit)
+
+
+def test_scores_stay_between_zero_and_one():
+    scores = [score for _, score in weighted_score_fusion([R1, R2], weights=[3, 9])]
+
+    assert all(0.0 <= score <= 1.0 + 1e-12 for score in scores)
+
+
+def test_rescaling_one_retrievers_scores_does_not_change_the_result():
+    # The point of min-max: BM25 scores times ten and shifted, or any other scale, fuse the same way.
+    rescaled = [(doc_id, score * 10 + 3) for doc_id, score in R1]
+
+    fused = weighted_score_fusion([rescaled, R2], weights=[0.4, 0.6])
+    original = weighted_score_fusion([R1, R2], weights=[0.4, 0.6])
+
+    assert _ids(fused) == _ids(original)
+    assert _scores(fused) == pytest.approx(_scores(original))
+
+
+def test_unlike_rrf_the_size_of_the_score_gaps_matters():
+    # Both lists put A above B in `close` and `far`, only the gap between A and B differs, so a
+    # rank-based fusion cannot tell the two cases apart. The weighted one can.
+    other = [("B", 0.9), ("A", 0.8), ("Z", 0.0)]
+    close = [("A", 1.00), ("B", 0.99), ("C", 0.0)]  # A and B almost tied
+    far = [("A", 1.00), ("B", 0.10), ("C", 0.0)]  # B far behind A
+
+    assert _ids(reciprocal_rank_fusion([close, other])) == _ids(reciprocal_rank_fusion([far, other]))
+    assert _ids(weighted_score_fusion([close, other]))[0] == "B"
+    assert _ids(weighted_score_fusion([far, other]))[0] == "A"
+
+
+def test_a_zero_weight_removes_a_retrievers_influence_on_the_order():
+    fused = weighted_score_fusion([R1, R2], weights=[1, 0])
+
+    assert _ids(fused)[:3] == ["A", "B", "C"]  # the first list's order, untouched by the second
+
+
+def test_a_list_with_all_equal_scores_gives_every_document_the_full_normalized_score():
+    fused = _scores(weighted_score_fusion([[("A", 3.0), ("B", 3.0)], [("C", 7.0)]], weights=[0.5, 0.5]))
+
+    assert fused == pytest.approx({"A": 0.5, "B": 0.5, "C": 0.5})
+
+
+def test_weighted_fusion_ties_keep_the_order_of_first_appearance():
+    fused = weighted_score_fusion([[("B", 1.0), ("A", 1.0)]], weights=[1])
+
+    assert _ids(fused) == ["B", "A"]
+
+
+def test_only_the_first_occurrence_of_a_document_counts_in_weighted_fusion():
+    once = weighted_score_fusion([[("A", 2.0), ("B", 1.0)]], weights=[1])
+    repeated = weighted_score_fusion([[("A", 2.0), ("B", 1.0), ("A", 0.0)]], weights=[1])
+
+    assert repeated == once
+
+
+@pytest.mark.parametrize("weights, message", [
+    ([1.0], "weights for 2 rankings"),
+    ([1.0, 1.0, 1.0], "weights for 2 rankings"),
+    ([1.0, -0.5], "non-negative"),
+    ([1.0, float("nan")], "finite"),
+    ([1.0, float("inf")], "finite"),
+    ([0.0, 0.0], "all be zero"),
+])
+def test_invalid_weights_are_rejected_even_for_empty_rankings(weights, message):
+    with pytest.raises(ValueError, match=message):
+        weighted_score_fusion([[], []], k=1, weights=weights)
+
+
+@pytest.mark.parametrize("kwargs, message", [
+    ({"rankings": []}, "at least one"),
+    ({"rankings": [R1], "k": 0}, "k must"),
+])
+def test_weighted_fusion_rejects_invalid_arguments(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        weighted_score_fusion(**kwargs)

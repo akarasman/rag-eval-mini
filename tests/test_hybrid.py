@@ -198,3 +198,15 @@ def test_fusion_settings_given_in_a_config_style_dict_are_applied():
     })
 
     assert hybrid.fusion_params == {"rrf_k": 10}
+
+
+def test_weighted_fusion_can_be_chosen_with_its_weights():
+    hybrid = _hybrid(fusion="weighted", fusion_params={"weights": [0.9, 0.1]})
+    hybrid.index({})
+
+    assert _ids(hybrid.search("q", k=3))[0] == "A"  # the first retriever's top document, because it has the weight
+
+
+def test_weights_that_do_not_match_the_number_of_retrievers_fail_when_the_retriever_is_built():
+    with pytest.raises(ValueError, match="3 weights for 2 rankings"):
+        _hybrid(fusion="weighted", fusion_params={"weights": [0.2, 0.3, 0.5]})

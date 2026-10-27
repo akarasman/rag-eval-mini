@@ -1,0 +1,31 @@
+experiment: scifact-baselines
+
+dataset:
+  name: scifact
+  data_dir: data
+  split: test
+
+retriever:
+  name: hybrid
+  params:
+    fusion: weighted
+    fusion_params: {weights: [0.3, 0.7]}  # chosen on the train split by tune_weights.py
+    candidates_per_retriever: 100
+    components:
+      - name: bm25
+        params: {k1: 1.5, b: 0.75, stem: false}
+      - name: dense
+        params:
+          model_name: BAAI/bge-small-en-v1.5
+          query_prefix: "Represent this sentence for searching relevant passages: "
+          store: exact
+
+metrics:
+  names: [recall, mrr, ndcg]
+  ks: [1, 5, 10, 100]
+
+mlflow:
+  run_name: hybrid weighted bm25 + bge-small
+  examples:
+    n: 10
+    metric: ndcg@10

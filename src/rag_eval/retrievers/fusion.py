@@ -13,7 +13,7 @@ and `params` are the strategy's own named settings (e.g. rrf_k). It must
 
 To add a strategy: write such a function and decorate it with @register_fusion("name").
 """
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -52,6 +52,62 @@ def get_fusion(name: str) -> FusionFunction:
     if name not in FUSION_REGISTRY:
         raise ValueError(f"Unknown fusion {name!r}; available: {available_fusions()}")
     return FUSION_REGISTRY[name]
+
+
+@register_fusion("weighted")
+def weighted_score_fusion(rankings: List[Ranking], k: int = 10, weights: Optional[List[float]] = None) -> Ranking:
+    """Merge ranked lists by a weighted sum of min-max normalized scores.
+
+    Each ranking's scores are rescaled to [0, 1] (its best document 1, its worst 0), which puts BM25
+    scores and cosine similarities on the same scale. A document gets weight * normalized score from
+    every ranking it appears in; a document missing from a ranking gets 0 from it, the same as that
+    ranking's worst document. Unlike RRF this uses how far apart the scores are, not only the order.
+    Higher scores must mean better. Within one ranking, only the first occurrence of a document counts.
+
+    Args:
+        rankings: one ranking per retriever, each best first, with comparable-within-a-ranking scores.
+        k: how many fused results to return.
+        weights: one non-negative weight per ranking, in the same order; they are rescaled to sum to 1.
+            None means equal weights.
+
+    Returns:
+        At most k (doc_id, fused score) pairs, best first, with scores in [0, 1]. Documents with equal
+        scores keep the order in which they first appeared. A ranking whose scores are all equal
+        (e.g. a single document) carries no ordering information, so every document in it gets 1.0.
+
+    Raises:
+        ValueError: if rankings is empty, k <= 0, or weights has the wrong length, a negative or
+            non-finite entry, or sums to zero. Checked even when the rankings themselves are empty.
+    """
+    if not rankings:
+        raise ValueError("at least one ranking is required")
+    if k <= 0:
+        raise ValueError("k must be positive")
+    if weights is None:
+        weights = [1.0] * len(rankings)
+    if len(weights) != len(rankings):
+        raise ValueError(f"got {len(weights)} weights for {len(rankings)} rankings")
+    if any(not np.isfinite(w) or w < 0 for w in weights):
+        raise ValueError("weights must be finite and non-negative")
+    if sum(weights) <= 0:
+        raise ValueError("weights must not all be zero")
+    shares = [w / sum(weights) for w in weights]
+
+    fused: Dict[str, float] = {}  # insertion order = order of first appearance
+    for ranking, share in zip(rankings, shares):
+        unique: Dict[str, float] = {}
+        for doc_id, score in ranking:
+            unique.setdefault(doc_id, score)
+        if not unique:
+            continue
+        low, high = min(unique.values()), max(unique.values())
+        for doc_id, score in unique.items():
+            normalized = (score - low) / (high - low) if high > low else 1.0
+            fused[doc_id] = fused.get(doc_id, 0.0) + share * normalized
+
+    doc_ids = list(fused)
+    scores = np.array([fused[doc_id] for doc_id in doc_ids])
+    return [(doc_ids[i], float(scores[i])) for i in top_k_indices(scores, k)] if doc_ids else []
 
 
 @register_fusion("rrf")
