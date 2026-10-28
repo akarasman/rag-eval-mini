@@ -6,6 +6,8 @@ true neighbours; ef_search trades speed for accuracy at query time.
 
 FAISS only knows row positions (0..n-1), so the store keeps the list of IDs and maps positions back.
 """
+import zipfile
+from pathlib import Path
 from typing import List, Optional
 
 import faiss
@@ -70,6 +72,30 @@ class FaissVectorStore:
         
         # When k exceeds the stored count, FAISS pads with position -1; those are not results.
         return [(self._ids[pos], float(score)) for score, pos in zip(scores[0], positions[0]) if pos != -1]
+
+    def save(self, path: Path) -> None:
+        """Write index and ids into one file. See PersistableVectorStore.save."""
+        if self._index is None:
+            raise RuntimeError("build() must be called before save()")
+        # Through an open file: np.savez would append ".npz" to a path that lacks it.
+        with open(path, "wb") as file:
+            np.savez(file, index=faiss.serialize_index(self._index), ids=np.array(self._ids))
+
+    def load(self, path: Path) -> None:
+        """Read an index and its ids written by save(). See PersistableVectorStore.load."""
+        try:
+            with np.load(path, allow_pickle=False) as data:
+                index = faiss.deserialize_index(data["index"])
+                ids = data["ids"].tolist()
+        except (OSError, EOFError, KeyError, RuntimeError, ValueError, zipfile.BadZipFile) as error:
+            raise ValueError(f"cannot read the saved index {path}: {error}") from error
+        if index.ntotal != len(ids):
+            raise ValueError(f"saved index holds {index.ntotal} vectors but {len(ids)} ids")
+        if isinstance(index, faiss.IndexHNSWFlat):
+            index.hnsw.efSearch = self.ef_search  # the file holds the value it was saved with
+
+        self._index = index
+        self._ids = ids
 
     def __len__(self) -> int:
         return len(self._ids)

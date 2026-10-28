@@ -6,7 +6,7 @@ embedder's fingerprint (model and settings) and the ordered document IDs and tex
 setting, document or document order therefore gets a different file, and stale vectors can never be
 picked up.
 
-The only public name is EmbeddingCache; the key and the file layout are private.
+The public names are EmbeddingCache and embedding_key (index_cache.py reuses the key); the file layout is private.
 """
 import hashlib
 import logging
@@ -17,7 +17,7 @@ from typing import List, Optional
 import numpy as np
 
 
-def _cache_key(fingerprint: str, ids: List[str], texts: List[str]) -> str:
+def embedding_key(fingerprint: str, ids: List[str], texts: List[str]) -> str:
     """Hash of the embedder fingerprint and the ordered (id, text) pairs.
 
     Args:
@@ -51,7 +51,7 @@ class EmbeddingCache:
         self._cache_dir = Path(cache_dir)
 
     def _path(self, fingerprint: str, ids: List[str], texts: List[str]) -> Path:
-        return self._cache_dir / f"embeddings-{_cache_key(fingerprint, ids, texts)[:32]}.npy"
+        return self._cache_dir / f"embeddings-{embedding_key(fingerprint, ids, texts)[:32]}.npy"
 
     def load(self, fingerprint: str, ids: List[str], texts: List[str]) -> Optional[np.ndarray]:
         """Look up the embeddings of exactly this corpus under exactly this embedder.

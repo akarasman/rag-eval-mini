@@ -10,7 +10,8 @@ Contract shared by every store (exact, FAISS, Qdrant, ...):
 - search() returns at most k (id, score) pairs, best first, and fewer only if the store holds fewer
   than k vectors. Approximate stores may miss true neighbours; the exact store never does.
 """
-from typing import List, Protocol, Tuple
+from pathlib import Path
+from typing import List, Protocol, Tuple, runtime_checkable
 
 import numpy as np
 
@@ -40,6 +41,38 @@ class VectorStore(Protocol):
 
     def __len__(self) -> int:
         """Number of stored vectors (0 before build)."""
+        ...
+
+
+@runtime_checkable
+class PersistableVectorStore(VectorStore, Protocol):
+    """A store that can write its built index to a file and read it back (FAISS, yes; a server-side
+    store like Qdrant keeps its own data, so it does not implement this).
+
+    runtime_checkable: the retriever asks isinstance(store, PersistableVectorStore) to decide
+    whether an index cache applies. isinstance only checks that save and load exist.
+    """
+
+    def save(self, path: Path) -> None:
+        """Write the built index to `path`.
+
+        Args:
+            path: the file to write.
+
+        Raises:
+            RuntimeError: if build() hasn't been called.
+        """
+        ...
+
+    def load(self, path: Path) -> None:
+        """Replace the store's content with the index saved at `path`.
+
+        Args:
+            path: a file written by save() of a store with the same settings.
+
+        Raises:
+            ValueError: if the file is unreadable or inconsistent. The store keeps its previous content.
+        """
         ...
 
 

@@ -13,9 +13,10 @@ from typing import Any, Dict, Optional, List
 import numpy as np
 
 from ..embedding import Embedder, SentenceTransformerEmbedder
-from ..embedding_cache import EmbeddingCache
+from ..embedding_cache import EmbeddingCache, embedding_key
+from ..index_cache import IndexCache
 from ..text import doc_to_text
-from ..vectorstores.base import VectorStore
+from ..vectorstores.base import PersistableVectorStore, VectorStore
 from ..vectorstores.registry import build_vector_store
 from .base import Ranking
 from .registry import register_retriever
@@ -34,7 +35,11 @@ class DenseRetriever:
         batch_size: documents embedded per forward pass.
         max_seq_length: truncate inputs to this many tokens; None keeps the model's own limit.
         use_cache: reuse and save corpus embeddings on disk.
-        cache_dir: where the embedding cache lives.
+        cache_dir: where the embedding and index caches live.
+        rebuild_index: ignore the saved index, build a new one and save it over the old (the cached
+            embeddings are still used). Has no effect with use_cache off.
+        rebuild_embeddings: ignore the saved embeddings, embed again and save them over the old. This
+            also rebuilds the index, which depends on them. Has no effect with use_cache off.
         embedder: use this instead of building a SentenceTransformerEmbedder (tests inject a fake).
 
     The embedding model is loaded on the first index() call, not when the retriever is built, so
@@ -54,12 +59,19 @@ class DenseRetriever:
         max_seq_length: Optional[int] = None,
         use_cache: bool = True,
         cache_dir: str = "cache",
+        rebuild_index: bool = False,
+        rebuild_embeddings: bool = False,
         embedder: Optional[Embedder] = None,
     ):
         self.model_name = model_name
         self.use_cache = use_cache
+        self.rebuild_index = rebuild_index
+        self.rebuild_embeddings = rebuild_embeddings
         self.cache_dir = Path(cache_dir)
         self._cache: Optional[EmbeddingCache] = EmbeddingCache(self.cache_dir) if use_cache else None
+        self._index_cache: Optional[IndexCache] = IndexCache(self.cache_dir) if use_cache else None
+        self._store_name = store
+        self._store_params = store_params or {}
         self._embedder_settings = {
             "model_name": model_name,
             "query_prefix": query_prefix,
@@ -68,7 +80,7 @@ class DenseRetriever:
             "max_seq_length": max_seq_length,
         }
         self._embedder: Optional[Embedder] = embedder
-        self._store: VectorStore = build_vector_store(store, store_params or {})
+        self._store: VectorStore = build_vector_store(store, self._store_params)
         self._doc_ids: list = []
         self._indexed = False
 
@@ -94,7 +106,11 @@ class DenseRetriever:
         return vectors
 
     def index(self, corpus: Dict[str, Dict[str, str]]) -> None:
-        """Embed every document (or load the cached embeddings) and build the vector store.
+        """Fill the vector store from the cached index, or else embed the documents and build it.
+
+        With use_cache on and a store that can save its index, a saved index for exactly this corpus,
+        embedder and store settings is loaded and no embedding happens. Otherwise the embeddings come
+        from the embedding cache (or the model) and the freshly built index is saved.
 
         Raises:
             ValueError: if the corpus is empty, or the embedder does not return unit-length vectors.
@@ -103,13 +119,29 @@ class DenseRetriever:
         doc_ids = list(corpus)
         texts = [doc_to_text(corpus[doc_id]) for doc_id in doc_ids]
 
-        vectors = None
-        if self._cache is not None:
-            vectors = self._load_cached_vectors(embedder, texts, doc_ids)
-        if vectors is None:
-            vectors = self._build_vectors(embedder, texts, doc_ids)
+        index_cache = self._index_cache if isinstance(self._store, PersistableVectorStore) else None
+        corpus_key = embedding_key(embedder.fingerprint, doc_ids, texts)
 
-        self._store.build(doc_ids, vectors)
+        # Fresh embeddings invalidate any saved index, so rebuild_embeddings implies rebuilding the index.
+        reuse_index = not (self.rebuild_index or self.rebuild_embeddings)
+
+        if (
+            index_cache is not None
+            and reuse_index
+            and index_cache.load(self._store, corpus_key, self._store_name, self._store_params)
+        ):
+            logging.info(f"Loaded the cached {self._store_name} index from {self.cache_dir}")
+        else:
+            vectors = None
+            if self._cache is not None and not self.rebuild_embeddings:
+                vectors = self._load_cached_vectors(embedder, texts, doc_ids)
+            if vectors is None:
+                vectors = self._build_vectors(embedder, texts, doc_ids)
+
+            self._store.build(doc_ids, vectors)
+            if index_cache is not None:
+                index_cache.save(self._store, corpus_key, self._store_name, self._store_params)
+
         self._doc_ids = doc_ids
         self._indexed = True
 
