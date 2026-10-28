@@ -1,8 +1,9 @@
 """Tests for vector stores.
 
-Contract tests run against every store listed in STORE_FACTORIES (adding a backend there runs them all);
+Contract tests run against every store listed in STORE_FACTORIES (adding a backend there runs them all)
+and against the stores that need a server (SERVER_STORES, skipped when the server is not running);
 behaviour specific to one store (exact: determinism, true top-k; faiss: agreement with exact) is tested
-separately.
+separately, Qdrant's in test_qdrant_store.py.
 """
 from functools import partial
 
@@ -11,6 +12,7 @@ import pytest
 
 from rag_eval.vectorstores.exact import ExactVectorStore
 from rag_eval.vectorstores.faiss_store import FaissVectorStore
+from rag_eval.vectorstores.qdrant_store import QdrantVectorStore
 
 STORE_FACTORIES = {
     "exact": ExactVectorStore,
@@ -18,10 +20,16 @@ STORE_FACTORIES = {
     "faiss_hnsw": partial(FaissVectorStore, index_type="hnsw"),
 }
 
+# Stores that need a running server. Each name needs a "<name>_store_factory" fixture in conftest.py,
+# which gives every store its own collection and cleans up afterwards.
+SERVER_STORES = ["qdrant"]
 
-@pytest.fixture(params=sorted(STORE_FACTORIES))
+
+@pytest.fixture(params=sorted(STORE_FACTORIES) + SERVER_STORES)
 def make_store(request):
     """A factory for an empty store of the backend under test."""
+    if request.param in SERVER_STORES:
+        return request.getfixturevalue(f"{request.param}_store_factory")
     return STORE_FACTORIES[request.param]
 
 
@@ -215,7 +223,11 @@ def test_faiss_hnsw_builds_an_hnsw_index_with_the_given_settings():
 
 # --- registry ---------------------------------------------------------------
 
-@pytest.mark.parametrize("name, store_class", [("exact", ExactVectorStore), ("faiss", FaissVectorStore)])
+@pytest.mark.parametrize("name, store_class", [
+    ("exact", ExactVectorStore),
+    ("faiss", FaissVectorStore),
+    ("qdrant", QdrantVectorStore),  # building one does not contact the server
+])
 def test_every_store_is_registered_and_built_by_name(name, store_class):
     from rag_eval.vectorstores.registry import build_vector_store
 
