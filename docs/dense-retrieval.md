@@ -17,7 +17,7 @@ Embeds documents and queries with a sentence-embedding model and ranks by cosine
 | Exact store | Brute-force matrix multiply, then `utils.top_k_indices` | The reference every approximate store is measured against. Ties keep insertion order |
 | Registry | `@register_vector_store("name")`, built with `build_vector_store(name, params)` | Same pattern as retrievers and metrics; the config picks the store by name |
 
-Why not a "real" vector database yet: for ~5k vectors, brute force is exact and takes milliseconds. Indexes (HNSW, IVF) only pay off at hundreds of thousands of vectors, and they trade accuracy for speed. Planned: FAISS (flat as a cross-check, HNSW to measure recall against the exact store), then Qdrant via Docker as a real database.
+For ~5k vectors, brute force is exact and takes milliseconds. Indexes (HNSW, IVF) only pay off at hundreds of thousands of vectors, and they trade accuracy for speed. FAISS (flat and HNSW) and Qdrant (a server, via Docker) are available as stores too; all three, the index cache and the rebuild flags are described in [vectorstores.md](vectorstores.md).
 
 ## Embedder (`embedding.py`)
 - `Embedder` protocol: `fingerprint`, `embed_documents(texts)` and `embed_query(text)`, returning unit-length float32 vectors. Tests use a fake, so they never load PyTorch.
@@ -37,7 +37,7 @@ The public interface is one small class: `EmbeddingCache(cache_dir)` with `load(
 | Writes | Temporary file, then `os.replace` | An interrupted run cannot leave a half-written cache file |
 
 ## `DenseRetriever`
-- Parameters (all plain values, so a YAML config can set them): `model_name`, `store`, `store_params`, `query_prefix`, `document_prefix`, `batch_size`, `max_seq_length`, `use_cache`, `cache_dir`; `embedder` can be injected for tests.
+- Parameters (all plain values, so a YAML config can set them): `model_name`, `store`, `store_params`, `query_prefix`, `document_prefix`, `batch_size`, `max_seq_length`, `use_cache`, `cache_dir`, `rebuild_index`, `rebuild_embeddings`; `embedder` can be injected for tests. With `use_cache` on and a store that can save its index (FAISS), a saved index is loaded instead of embedding and building; see [vectorstores.md](vectorstores.md).
 - The model loads on the **first `index()`**, not at construction, so building a retriever from a config is cheap. The vector store is built immediately, so an unknown store or bad store parameters fail early.
 - Embedder output is checked to be unit length (`ValueError` otherwise). An unnormalized embedder would silently rank by raw dot product. Queries are checked too: scaling a query would not change one ranking, but it would make scores incomparable across queries.
 - Unlike BM25, every document has a similarity with every query, so a dense ranking always has `k` results (when the corpus is large enough).
@@ -58,13 +58,12 @@ Embedding 5,183 documents took 129 s on CPU; with the cache, indexing takes abou
 ## Tests
 - `tests/test_dense.py` (fake embedder): topical ranking, descending cosine scores, always `k` results, title included in the indexed text, a document is its own best match, re-indexing, errors; the cache is hit for the same corpus and missed for changed text, a different fingerprint, `use_cache=False`, or a damaged file; the model is not loaded at construction.
 - `tests/test_embedding_cache.py` (through the public `load` / `save` only): round trip; a change of model, any ID, any text, the order or the number of documents is a miss; no ambiguity between an ID and its text; non-ASCII text; misses for wrong-shaped and unreadable files; `save` rejects vectors that do not match the documents; the directory is created only on the first save; no temporary file left.
-- `tests/test_vectorstores.py`: contract tests run against every store listed in `STORE_FACTORIES` through a parametrized fixture, plus exact-store-only tests (tie order, true top-k) and the registry.
+- `tests/test_vectorstores.py`, `tests/test_qdrant_store.py`, `tests/test_index_cache.py`: the vector store contract, the Qdrant store and the index cache; see [vectorstores.md](vectorstores.md).
 - `tests/test_embedding_real.py` (marked `slow`, excluded by default, run with `pytest -m slow`): the real model matches meaning without shared words, returns unit-length float32 vectors, and its fingerprint reacts to prefixes and length limit.
 
 ## Open items
-- FAISS flat and HNSW stores; an ANN-vs-exact recall experiment (sweep the HNSW search effort on SciFact for accuracy, synthetic vectors for speed); Qdrant via Docker.
+- The ANN-vs-exact recall experiment (sweep the HNSW search effort on SciFact for accuracy, synthetic vectors for speed); see the open items in [vectorstores.md](vectorstores.md).
 - Truncation: MiniLM cuts inputs at about 256 word pieces; count how many SciFact abstracts are affected.
 - Try a retrieval-tuned model (e.g. BGE small, which needs a query prefix) as a config-only experiment.
-- Contract for approximate stores: a store may return fewer than `k` results or pad (FAISS pads with `-1`); the contract test for "k larger than the store" will likely need adjusting.
 - Batch search (many queries per call) would speed up evaluation for stores that support it.
 - Hybrid retriever to combine the two rankings.
