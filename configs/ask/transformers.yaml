@@ -1,0 +1,25 @@
+# Ask a question with a chat model that runs inside this process (CPU by default).
+#   python -m rag_eval.ask --config configs/ask/transformers.yaml "your question"
+# The model is downloaded from Hugging Face on first use. Small instruct models (about 0.1 to 1.5 billion
+# parameters) are practical on a laptop CPU; there is deliberately no default, so choose one.
+
+dataset:
+  name: scifact
+  data_dir: data
+
+retriever_from: experiments/configs/dense_bge_small_faiss_hnsw.yaml
+
+llm:
+  name: transformers
+  params:
+    model_name: HuggingFaceTB/SmolLM2-360M-Instruct
+    device: cpu
+    temperature: 0.0
+    max_new_tokens: 512
+
+generation:
+  k: 5                          # passages sent to the model
+  max_attempts: 2               # LLM calls allowed when a reply is not valid JSON
+  on_invalid_citation: report   # or: ignore
+  max_passage_chars: 1500       # small models have short contexts, so cut long passages
+  # min_score: 0.0              # drop weak passages; only meaningful for plain bm25 or dense retrievers

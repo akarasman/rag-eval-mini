@@ -1,0 +1,18 @@
+dataset:
+  name: scifact
+  data_dir: data
+retriever_from: experiments/configs/dense_bge_small_faiss_hnsw.yaml
+
+
+llm:
+  name: ollama
+  params:
+    model: llama3.2
+    host: http://localhost:11434
+    temperature: 0.0
+    max_tokens: 512
+
+generation:
+  k: 5                          
+  max_attempts: 2              
+  on_invalid_citation: report   

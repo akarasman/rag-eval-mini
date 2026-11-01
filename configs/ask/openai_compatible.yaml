@@ -1,0 +1,29 @@
+dataset:
+  name: scifact
+  data_dir: data
+
+retriever_from: experiments/configs/dense_bge_small_faiss_hnsw.yaml
+
+llm:
+  name: openai_compatible
+  params:
+    base_url: https://api.example.com/v1  
+    model: your-model-name                 
+    api_key_env: LLM_API_KEY
+    temperature: 0.0
+    max_tokens: 512
+  params: {k1: 1.5, b: 0.75, stem: false}
+
+llm:
+  name: openai_compatible
+  params:
+    base_url: https://api.example.com/v1  
+    model: your-model-name                 
+    api_key_env: LLM_API_KEY
+    temperature: 0.0
+    max_tokens: 512
+
+generation:
+  k: 5                          
+  max_attempts: 2               
+  on_invalid_citation: report  
