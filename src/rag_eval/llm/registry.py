@@ -15,6 +15,9 @@ LLM_REGISTRY: Dict[str, Callable[..., LLM]] = {}
 def register_llm(name: str) -> Callable[[_LLMT], _LLMT]:
     """Decorator that registers an LLM class (or factory) under `name`, returned unchanged.
 
+    Args:
+        name: the name a config uses to ask for this backend, e.g. "ollama".
+
     Raises:
         ValueError: if the name is already registered.
     """
